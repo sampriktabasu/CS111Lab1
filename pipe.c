@@ -53,22 +53,22 @@ int main(int argc, char *argv[])
 
 
   // there's never input for the first command ... close stdin
-  close_pipe(p2);
+  close_descriptor(p2[1]);
 
   // loop through args
-  for(int i = 0; i < argc-1; i++) {
-    int fork = fork();
-    if(fork < 0) {
+  for(int i = 1; i < argc; i++) {
+    int pid = fork();
+    if(pid < 0) {
       perror("fork failure");
       exit(ESRCH);
       return ESRCH;
     }
-    else if (fork == 0) {
+    if (pid == 0) {
       // handle child processes
       // handle middle arguments
       if ((i % 2) == 1) {
 	duplicate(p2[0], STDIN_FILENO);
-	if(i != argc - 1) {
+	if(i != (argc - 1)) {
 	  duplicate(p1[1], STDOUT_FILENO);
 	}
 	close_descriptor(p1[0]);
@@ -77,13 +77,40 @@ int main(int argc, char *argv[])
       }
       else {
 	duplicate(p1[0], STDIN_FILENO);
-	if(i!= argc-1) {
-	  duplicate()
+	if(i!= (argc-1)) {
+	  duplicate(p2[1], STDOUT_FILENO);
 	}
+	close_descriptor(p1[0]);
+	close_descriptor(p2[0]);
+	close_descriptor(p2[1]);
+      }
+
+      int exec = execlp(argv[i], argv[i], NULL);
+      if(exec == -1) {
+	exec = errno;
+	perror("execlp failure");
+	return exec;
       }
     }
     // fork returns positive
     else {
+      int status;
+      wait(&status);
+      if(WIFEXITED(status) && (WEXITSTATUS(status)!=0)) {
+	perror("child process errored out");
+	exit(WEXITSTATUS(status));
+      }
+      if(i % 2 == 1) {
+	close_descriptor(p1[1]);
+	close_descriptor(p2[0]);
+	create_pipe(p2);
+      }
+      else {
+	close_descriptor(p1[0]);
+	close_descriptor(p2[1]);
+	create_pipe(p1);
+      }
+      
 
     }
   }
