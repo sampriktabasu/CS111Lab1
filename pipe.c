@@ -4,16 +4,15 @@
 #include <errno.h>
 #include <sys/wait.h>
 
-// helper function to open a pipe
+// helper function to open a pipe accounting for failure
 void  create_pipe(int *p) {
   if(pipe(p) == -1) {
-    perror("pipe failure");
     exit(errno);
   }
   return;
 }
 
-// helper function to handle when a pipe is duplicated
+// helper function to handle when a pipe is duplicated accounting for failure
 void duplicate(int p, int dest) {
   if(dup2(p, dest) == -1) {
     exit(errno);
@@ -21,7 +20,7 @@ void duplicate(int p, int dest) {
   return;
 }
 
-// helper function to handle when a pipe is closed
+// helper function to handle when a pipe is closed accounting for failure
 void close_descriptor(int fd) {
   if(close(fd)== -1) {
     exit(errno);
@@ -32,7 +31,7 @@ void close_descriptor(int fd) {
 int main(int argc, char *argv[])
 {
 
-  // check for invalid arguments
+  // check for invalid number of arguments
   if(argc <= 1) {
     perror("invalid # of arguments");
     // throw error exit code
@@ -56,15 +55,14 @@ int main(int argc, char *argv[])
   for(int i = 1; i < argc; i++) {
     int pid = fork();
 
-    // if -1 account for fork failure, throw error (resource unavailable ESRCH)
+    // if -1 account for fork failure, throw error
     if(pid < 0) {
       perror("fork failure");
-      exit(ESRCH);
-      return ESRCH;
+      exit(errno);
+      return errno;
     }
     // child processes 
     if (pid == 0) {
-      // handle middle arguments
       if ((i % 2) == 1) {
 	// take in input on the read end 
 	duplicate(p2[0], STDIN_FILENO);
@@ -94,7 +92,7 @@ int main(int argc, char *argv[])
       // int exec = execlp(argv[i], argv[i], NULL);
       if(execlp(argv[i], argv[i], NULL) == -1) {
 	// exec = errno;
-	perror("execlp failure");
+	perror("failure executing a command");
 	return errno;
       }
     }
