@@ -14,7 +14,6 @@ void  create_pipe(int *p) {
 }
 
 // helper function to handle when a pipe is duplicated
-
 void duplicate(int p, int dest) {
   if(dup2(p, dest) == -1) {
     exit(errno);
@@ -28,7 +27,6 @@ void close_descriptor(int fd) {
     exit(errno);
   }
 }
-
 
 
 int main(int argc, char *argv[])
@@ -51,70 +49,78 @@ int main(int argc, char *argv[])
   int p2[2];
   create_pipe(p2);
 
-
   // there's never input for the first command ... close stdin
   close_descriptor(p2[1]);
 
-  // loop through args
+  // loop through all arguments 
   for(int i = 1; i < argc; i++) {
     int pid = fork();
+
+    // if -1 account for fork failure, throw error (resource unavailable ESRCH)
     if(pid < 0) {
       perror("fork failure");
       exit(ESRCH);
       return ESRCH;
     }
+    // child processes 
     if (pid == 0) {
-      // handle child processes
       // handle middle arguments
       if ((i % 2) == 1) {
+	// take in input on the read end 
 	duplicate(p2[0], STDIN_FILENO);
+	// if the current argument is not the last one, continue redirecting output to the write end of the pipe
 	if(i != (argc - 1)) {
 	  duplicate(p1[1], STDOUT_FILENO);
 	}
+	// close file descriptor read & write ends
 	close_descriptor(p1[0]);
 	close_descriptor(p1[1]);
 	close_descriptor(p2[0]);
       }
       else {
+	// input reads from the read end of the pipe
 	duplicate(p1[0], STDIN_FILENO);
 	if(i!= (argc-1)) {
+	  // ^^ redirect output 
 	  duplicate(p2[1], STDOUT_FILENO);
 	}
+	// close pipe read and write ends
 	close_descriptor(p1[0]);
 	close_descriptor(p2[0]);
 	close_descriptor(p2[1]);
       }
 
-      int exec = execlp(argv[i], argv[i], NULL);
-      if(exec == -1) {
-	exec = errno;
+      // actually execute the current command (return error if it fails)
+      // int exec = execlp(argv[i], argv[i], NULL);
+      if(execlp(argv[i], argv[i], NULL) == -1) {
+	// exec = errno;
 	perror("execlp failure");
-	return exec;
+	return errno;
       }
     }
-    // fork returns positive
+    // parent process, fork returns positive
     else {
       int status;
+      // actually wait for child processes to finish
       wait(&status);
       if(WIFEXITED(status) && (WEXITSTATUS(status)!=0)) {
 	perror("child process errored out");
 	exit(WEXITSTATUS(status));
       }
+      // close write and read end and run next pipe (handles output)
       if(i % 2 == 1) {
 	close_descriptor(p1[1]);
 	close_descriptor(p2[0]);
 	create_pipe(p2);
       }
+      // close read and write end and run pipe (handles input)
       else {
 	close_descriptor(p1[0]);
 	close_descriptor(p2[1]);
 	create_pipe(p1);
       }
-      
-
     }
   }
 
- 
   return 0;
 }
